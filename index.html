@@ -17,16 +17,13 @@
         .preview-active {
             @apply ring-2 ring-green-400;
         }
-        /* 進度條容器恆常顯示 */
         #seekControl {
             transition: all 0.2s;
         }
-        /* 拖曳時略微變深 */
         .sortable-ghost {
             opacity: 0.4;
             background: #cbd5e0;
         }
-        /* 全屏背景 */
         body {
             background: #f3f4f6;
         }
@@ -34,7 +31,7 @@
 </head>
 <body class="p-4 md:p-6 font-sans antialiased min-h-screen">
 
-<!-- 移除外層圓角容器，直接滿版 -->
+<!-- 全屏內容 -->
 <div class="w-full">
     <!-- 標題列 -->
     <div class="bg-white rounded-2xl shadow-sm p-4 md:p-6 mb-4 border border-gray-200">
@@ -42,10 +39,10 @@
             🎧 聆聽考試音檔製作器
             <span class="text-sm font-normal bg-blue-100 text-blue-700 px-3 py-1 rounded-full ml-4">文字轉普通話/粵語 · 可插空白 · 匯入外部音檔 · 輸出MP3</span>
         </h1>
-        <p class="text-gray-500">支援合併多段語音、調整順序/速度、插入靜音段與提示音，最終合成為完整的聽力MP3檔案。</p>
+        <p class="text-gray-500">支援合併多段語音、調整順序/速度/音量、插入靜音段與提示音，最終合成為完整的聽力MP3檔案。</p>
     </div>
 
-    <!-- API 金鑰設定 (VoiceRSS) 保留提示與連結 -->
+    <!-- API 金鑰設定 (保留提示與連結) -->
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex flex-wrap items-center gap-4">
         <div class="flex-1">
             <label class="block text-sm font-semibold text-amber-800 mb-1">🔑 TTS 服務金鑰 (VoiceRSS 免費版)</label>
@@ -55,13 +52,12 @@
         <div class="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm">粵語 (zh-hk) · 普通話 (zh-cn)</div>
     </div>
 
-    <!-- 控制區：四卡（按鈕置於下拉選單下方，垂直排列） -->
+    <!-- 控制區：四卡（按鈕垂直排列） -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <!-- 文字轉語音卡片 -->
         <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 flex flex-col">
             <h2 class="font-semibold text-blue-800 mb-2 flex items-center gap-1">🔊 文字轉語音</h2>
             <textarea id="ttsText" rows="2" placeholder="輸入要合成的文字，例如：第一題，請聽錄音..." class="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm mb-2"></textarea>
-            <!-- 語言選擇佔滿寬度，按鈕置於下方 -->
             <select id="ttsLang" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white mb-2">
                 <option value="zh-cn">普通話 (zh-cn)</option>
                 <option value="zh-hk">粵語 (zh-hk)</option>
@@ -70,7 +66,7 @@
             <p class="text-xs text-blue-500 mt-2">每個片段最長150字，超出自動截斷</p>
         </div>
 
-        <!-- 匯入外部音檔卡片 (多選、無速度調整) -->
+        <!-- 匯入外部音檔卡片 -->
         <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200 flex flex-col">
             <h2 class="font-semibold text-green-800 mb-2">📁 匯入外部音檔</h2>
             <input type="file" id="audioFileInput" accept="audio/*" multiple class="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-100 file:text-green-700 hover:file:bg-green-200 mb-2" />
@@ -128,7 +124,7 @@
             </div>
         </div>
 
-        <!-- 片段容器 (將套用Sortable拖曳) -->
+        <!-- 片段容器 (Sortable拖曳) -->
         <div id="fragmentsList" class="space-y-3 max-h-[400px] overflow-y-auto pr-2 border-t border-gray-200 pt-3">
             <div class="text-center text-gray-400 py-6" id="emptyPlaceholder">暫無片段，請使用上方功能加入語音或空白</div>
         </div>
@@ -142,9 +138,9 @@
 (function() {
     // ---------- 全域變數 ----------
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    let fragments = [];                 // 片段陣列 [{ id, type, name, buffer, duration, speed }]
+    let fragments = [];                 // 片段陣列 [{ id, type, name, buffer, duration, speed, volume }]
     let nextId = 1;
-    let previewSources = [];            // 存放正在預覽的音源
+    let previewSources = [];            // 存放正在預覽的音源 (包含gain節點便於清理)
     let isPreviewing = false;
     let timeline = [];                  // 時間表 [{ fragment, start, end, duration }]
     let previewBaseTime = 0;             // 預覽開始時的 audioContext.currentTime (相對 timelineOffset=0 的基準)
@@ -185,8 +181,8 @@
     // 停止目前預覽
     function stopPreview() {
         if (previewSources.length > 0) {
-            previewSources.forEach(source => {
-                try { source.stop(); } catch (e) {}
+            previewSources.forEach(item => {
+                try { item.source.stop(); } catch (e) {}
             });
             previewSources = [];
         }
@@ -196,7 +192,6 @@
         }
         isPreviewing = false;
         previewBtn.classList.remove('preview-active');
-        // 非預覽時禁用滑塊
         seekSlider.disabled = true;
         seekSlider.value = 0;
         currentTimeLabel.innerText = '0:00';
@@ -237,7 +232,6 @@
         }
         buildTimeline();
         totalTimeLabel.innerText = formatTime(totalDuration);
-        // 非預覽時滑塊保持禁用，但值可重置
         if (!isPreviewing) {
             seekSlider.disabled = true;
             seekSlider.value = 0;
@@ -255,11 +249,9 @@
         return `${mins}:${secs < 10 ? '0' + secs : secs}`;
     }
 
-    // 更新進度條 (由requestAnimationFrame驅動)
+    // 更新進度條
     function updateSeek() {
-        if (!isPreviewing || !timeline.length) {
-            return;
-        }
+        if (!isPreviewing || !timeline.length) return;
         const now = audioContext.currentTime;
         const currentTimelineTime = timelineOffset + (now - previewBaseTime);
         const clamped = Math.min(totalDuration, Math.max(0, currentTimelineTime));
@@ -283,7 +275,7 @@
         }
 
         // 停止目前播放
-        previewSources.forEach(s => { try { s.stop(); } catch(e) {} });
+        previewSources.forEach(item => { try { item.source.stop(); } catch(e) {} });
         previewSources = [];
 
         // 找出目標片段及偏移
@@ -304,7 +296,7 @@
         timelineOffset = timelineTime;
         previewBaseTime = audioContext.currentTime + 0.05;
 
-        // 從目標片段開始排程
+        // 從目標片段開始排程 (加入音量控制)
         let currentTime = previewBaseTime;
         let found = false;
         for (let seg of timeline) {
@@ -313,18 +305,28 @@
                 const source = audioContext.createBufferSource();
                 source.buffer = seg.fragment.buffer;
                 source.playbackRate.value = seg.fragment.speed;
-                source.connect(audioContext.destination);
+                
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = seg.fragment.volume !== undefined ? seg.fragment.volume : 1.0;
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
                 source.start(currentTime, offsetInFragment);
-                previewSources.push(source);
+                previewSources.push({ source, gainNode });
                 currentTime += (seg.duration - offsetInFragment);
                 found = true;
             } else {
                 const source = audioContext.createBufferSource();
                 source.buffer = seg.fragment.buffer;
                 source.playbackRate.value = seg.fragment.speed;
-                source.connect(audioContext.destination);
+                
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = seg.fragment.volume !== undefined ? seg.fragment.volume : 1.0;
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
                 source.start(currentTime);
-                previewSources.push(source);
+                previewSources.push({ source, gainNode });
                 currentTime += seg.duration;
             }
         }
@@ -333,7 +335,7 @@
         animationFrame = requestAnimationFrame(updateSeek);
     }
 
-    // 開始預覽 (從指定時間)
+    // 開始預覽
     async function startPreview(fromTime = 0) {
         stopPreview();
 
@@ -360,7 +362,6 @@
                 return;
             }
 
-            // 啟用滑塊、設定初始顯示
             seekSlider.disabled = false;
             currentTimeLabel.innerText = formatTime(fromTime);
             totalTimeLabel.innerText = formatTime(totalDuration);
@@ -378,9 +379,14 @@
                     const source = audioContext.createBufferSource();
                     source.buffer = seg.fragment.buffer;
                     source.playbackRate.value = seg.fragment.speed;
-                    source.connect(audioContext.destination);
+                    
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = seg.fragment.volume !== undefined ? seg.fragment.volume : 1.0;
+                    source.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
                     source.start(currentTime);
-                    previewSources.push(source);
+                    previewSources.push({ source, gainNode });
                     currentTime += seg.duration;
                 }
                 animationFrame = requestAnimationFrame(updateSeek);
@@ -391,16 +397,14 @@
         }
     }
 
-    // ---------- 渲染列表 + 初始化Sortable ----------
+    // ---------- 渲染列表 + 音量控制 + 速度控制 ----------
     function renderFragments() {
-        // 停止預覽 (列表變動)
         stopPreview();
 
         const container = fragmentsListDiv;
         if (fragments.length === 0) {
             container.innerHTML = '<div class="text-center text-gray-400 py-6" id="emptyPlaceholder">暫無片段，請使用上方功能加入語音或空白</div>';
             fragmentCountSpan.innerText = '0';
-            // 更新總時長顯示
             updateTotalTimeDisplay();
             return;
         }
@@ -411,6 +415,7 @@
             const typeName = f.type === 'tts' ? 'TTS' : (f.type === 'audio' ? '外部音檔' : (f.type === 'silence' ? '空白' : '提示音'));
             const durationSec = f.duration ? f.duration.toFixed(1) : '?';
             const speed = f.speed !== undefined ? f.speed : 1.0;
+            const volume = f.volume !== undefined ? f.volume : 1.0;
             const effectiveDuration = (f.duration / speed).toFixed(1);
             const displayName = f.name.length > 30 ? f.name.slice(0, 30) + '…' : f.name;
             html += `
@@ -423,10 +428,11 @@
                             <span class="badge">${typeName}</span>
                             ${f.buffer ? '' : '<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">載入中</span>'}
                         </div>
-                        <div class="flex text-xs text-gray-500 gap-3 mt-0.5">
-                            <span>原長: ${durationSec}秒</span>
-                            <span>⚡速度: <input type="number" class="speed-input w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" data-id="${f.id}" value="${speed}" min="0.3" max="3" step="0.1"></span>
-                            <span>實際: ${effectiveDuration}秒</span>
+                        <div class="flex flex-wrap items-center gap-3 mt-1">
+                            <span class="text-xs text-gray-500">原長: ${durationSec}秒</span>
+                            <span class="text-xs text-gray-500 flex items-center gap-1">⚡速度: <input type="number" class="speed-input w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" data-id="${f.id}" value="${speed}" min="0.3" max="3" step="0.1"></span>
+                            <span class="text-xs text-gray-500 flex items-center gap-1">🔊音量: <input type="number" class="volume-input w-16 px-1 py-0.5 border border-gray-300 rounded text-xs" data-id="${f.id}" value="${volume}" min="0.0" max="2.0" step="0.1"></span>
+                            <span class="text-xs text-gray-500">實際: ${effectiveDuration}秒</span>
                         </div>
                     </div>
                 </div>
@@ -440,7 +446,7 @@
         container.innerHTML = html;
         fragmentCountSpan.innerText = fragments.length;
 
-        // 綁定速度變更
+        // 速度變更
         document.querySelectorAll('.speed-input').forEach(inp => {
             inp.addEventListener('change', function(e) {
                 const id = parseInt(this.dataset.id);
@@ -450,12 +456,27 @@
                     if (isNaN(val) || val < 0.3) val = 0.3;
                     if (val > 3) val = 3;
                     frag.speed = val;
-                    renderFragments();  // 重新整理以更新實際時長顯示，並重新建立Sortable
+                    renderFragments();
                 }
             });
         });
 
-        // 移動、刪除事件 (委託)
+        // 音量變更
+        document.querySelectorAll('.volume-input').forEach(inp => {
+            inp.addEventListener('change', function(e) {
+                const id = parseInt(this.dataset.id);
+                const frag = fragments.find(f => f.id === id);
+                if (frag) {
+                    let val = parseFloat(this.value);
+                    if (isNaN(val) || val < 0) val = 0;
+                    if (val > 2) val = 2;
+                    frag.volume = val;
+                    renderFragments();
+                }
+            });
+        });
+
+        // 移動、刪除事件
         container.querySelectorAll('.move-up').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -487,28 +508,23 @@
             });
         });
 
-        // 更新總時長顯示
         updateTotalTimeDisplay();
 
-        // 初始化Sortable (拖曳排序)
         if (sortableInstance) sortableInstance.destroy();
         sortableInstance = new Sortable(container, {
             animation: 150,
             ghostClass: 'sortable-ghost',
             onEnd: function(evt) {
-                // 根據新的DOM順序重新排序 fragments 陣列
                 const items = container.querySelectorAll('.fragment-item');
                 const newOrder = Array.from(items).map(item => parseInt(item.dataset.id));
-                // 重新建構 fragments 陣列
                 const oldFragments = [...fragments];
                 fragments = newOrder.map(id => oldFragments.find(f => f.id === id));
-                // 簡單重新渲染以確保按鈕狀態正確
                 renderFragments();
             }
         });
     }
 
-    // ---------- 產生提示音 AudioBuffer ----------
+    // 產生提示音
     function createBeepBuffer(durationSec, sampleRate = 44100) {
         const buffer = audioContext.createBuffer(1, Math.floor(durationSec * sampleRate), sampleRate);
         const data = buffer.getChannelData(0);
@@ -519,8 +535,8 @@
         return buffer;
     }
 
-    // ---------- 加入片段通用 ----------
-    function addFragment(type, name, buffer, duration, speed = 1.0, extra = {}) {
+    // 加入片段通用 (預設音量1.0)
+    function addFragment(type, name, buffer, duration, speed = 1.0, volume = 1.0, extra = {}) {
         if (buffer && !duration) duration = buffer.duration;
         const fragment = {
             id: nextId++,
@@ -529,13 +545,14 @@
             buffer: buffer || null,
             duration: duration || 0,
             speed,
+            volume,
             ...extra
         };
         fragments.push(fragment);
         renderFragments();
     }
 
-    // ---------- TTS ----------
+    // TTS
     async function fetchTtsBuffer(text, lang, key) {
         if (!key || key.trim() === '') throw new Error('請輸入API Key');
         const trimmed = text.slice(0, 150);
@@ -565,6 +582,7 @@
             buffer: null,
             duration: null,
             speed: 1.0,
+            volume: 1.0,
             pending: true
         });
         renderFragments();
@@ -587,7 +605,7 @@
         }
     });
 
-    // 匯入外部音檔 (多檔案自動)
+    // 匯入外部音檔
     audioFileInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -597,7 +615,7 @@
                 const arrayBuffer = await file.arrayBuffer();
                 const buffer = await audioContext.decodeAudioData(arrayBuffer);
                 const name = `📁 ${file.name}`;
-                addFragment('audio', name, buffer, buffer.duration, 1.0);
+                addFragment('audio', name, buffer, buffer.duration, 1.0, 1.0);
             }
             showStatus(`已匯入 ${files.length} 個音檔`);
         } catch (err) {
@@ -612,7 +630,7 @@
         if (isNaN(secs) || secs <= 0) return;
         const name = `⏸️ 空白 ${secs}秒`;
         const silentBuffer = audioContext.createBuffer(1, Math.floor(secs * audioContext.sampleRate), audioContext.sampleRate);
-        addFragment('silence', name, silentBuffer, secs, 1.0);
+        addFragment('silence', name, silentBuffer, secs, 1.0, 1.0);
     });
 
     // 加入提示音
@@ -621,7 +639,7 @@
         if (isNaN(secs) || secs <= 0) return;
         const name = `🔔 提示音 ${secs}秒`;
         const beepBuffer = createBeepBuffer(secs, audioContext.sampleRate);
-        addFragment('beep', name, beepBuffer, secs, 1.0);
+        addFragment('beep', name, beepBuffer, secs, 1.0, 1.0);
     });
 
     // 清空全部
@@ -633,18 +651,18 @@
         }
     });
 
-    // 預覽按鈕
+    // 預覽
     previewBtn.addEventListener('click', () => {
         startPreview(0);
     });
 
-    // 停止預覽
+    // 停止
     stopPreviewBtn.addEventListener('click', () => {
         stopPreview();
         showStatus('預覽已停止');
     });
 
-    // 進度條拖曳跳轉
+    // 進度條跳轉
     seekSlider.addEventListener('input', (e) => {
         if (!isPreviewing || !timeline.length) return;
         const ratio = parseFloat(e.target.value) / 100;
@@ -652,7 +670,7 @@
         seekTo(targetTime);
     });
 
-    // 匯出MP3
+    // 匯出MP3 (加入音量控制)
     exportMp3Btn.addEventListener('click', async () => {
         if (fragments.length === 0) { showStatus('沒有可匯出的片段', true); return; }
         const missingBuffer = fragments.find(f => !f.buffer);
@@ -675,7 +693,12 @@
                 const source = offlineCtx.createBufferSource();
                 source.buffer = frag.buffer;
                 source.playbackRate.value = frag.speed;
-                source.connect(offlineCtx.destination);
+                
+                const gainNode = offlineCtx.createGain();
+                gainNode.gain.value = frag.volume !== undefined ? frag.volume : 1.0;
+                source.connect(gainNode);
+                gainNode.connect(offlineCtx.destination);
+                
                 source.start(currentTime);
                 currentTime += frag.duration / frag.speed;
             }
