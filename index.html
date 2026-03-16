@@ -26,79 +26,83 @@
             opacity: 0.4;
             background: #cbd5e0;
         }
+        /* 全屏背景 */
+        body {
+            background: #f3f4f6;
+        }
     </style>
 </head>
-<body class="bg-gray-50 p-6 font-sans antialiased">
+<body class="p-4 md:p-6 font-sans antialiased min-h-screen">
 
-<div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8 border border-gray-200">
-    <h1 class="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-        🎧 聆聽考試音檔製作器
-        <span class="text-sm font-normal bg-blue-100 text-blue-700 px-3 py-1 rounded-full ml-4">文字轉普通話/粵語 · 可插空白 · 匯入外部音檔 · 輸出MP3</span>
-    </h1>
-    <p class="text-gray-500 mb-6 border-b pb-4">支援合併多段語音、調整順序/速度、插入靜音段與提示音，最終合成為完整的聽力MP3檔案。</p>
+<!-- 移除外層圓角容器，直接滿版 -->
+<div class="w-full">
+    <!-- 標題列 -->
+    <div class="bg-white rounded-2xl shadow-sm p-4 md:p-6 mb-4 border border-gray-200">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+            🎧 聆聽考試音檔製作器
+            <span class="text-sm font-normal bg-blue-100 text-blue-700 px-3 py-1 rounded-full ml-4">文字轉普通話/粵語 · 可插空白 · 匯入外部音檔 · 輸出MP3</span>
+        </h1>
+        <p class="text-gray-500">支援合併多段語音、調整順序/速度、插入靜音段與提示音，最終合成為完整的聽力MP3檔案。</p>
+    </div>
 
-    <!-- API 金鑰設定 (VoiceRSS) -->
+    <!-- API 金鑰設定 (VoiceRSS) 保留提示與連結 -->
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex flex-wrap items-center gap-4">
         <div class="flex-1">
             <label class="block text-sm font-semibold text-amber-800 mb-1">🔑 TTS 服務金鑰 (VoiceRSS 免費版)</label>
             <input type="text" id="apiKey" value="698db3637cbb41c999d39ca202912bfe" placeholder="輸入你的 VoiceRSS API Key" class="w-full px-3 py-2 border border-amber-300 rounded-lg shadow-sm focus:ring-2 focus:ring-amber-200 focus:border-amber-400 text-sm">
+            <p class="text-xs text-amber-600 mt-1">使用默认演示Key可能有次数限制，建议<a href="https://www.voicerss.org/registration.aspx" target="_blank" class="underline">免费申请</a>后替换。</p>
         </div>
         <div class="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg shadow-sm">粵語 (zh-hk) · 普通話 (zh-cn)</div>
     </div>
 
-    <!-- 控制區：四卡（文字轉語音 / 匯入音檔 / 插入空白 / 加入提示音） -->
+    <!-- 控制區：四卡（按鈕置於下拉選單下方，垂直排列） -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <!-- 文字轉語音卡片 -->
-        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 flex flex-col">
             <h2 class="font-semibold text-blue-800 mb-2 flex items-center gap-1">🔊 文字轉語音</h2>
             <textarea id="ttsText" rows="2" placeholder="輸入要合成的文字，例如：第一題，請聽錄音..." class="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm mb-2"></textarea>
-            <div class="flex gap-2">
-                <select id="ttsLang" class="border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white">
-                    <option value="zh-cn">普通話 (zh-cn)</option>
-                    <option value="zh-hk">粵語 (zh-hk)</option>
-                </select>
-                <button id="addTtsBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex-1 whitespace-nowrap">➕ 加入至列表</button>
-            </div>
+            <!-- 語言選擇佔滿寬度，按鈕置於下方 -->
+            <select id="ttsLang" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white mb-2">
+                <option value="zh-cn">普通話 (zh-cn)</option>
+                <option value="zh-hk">粵語 (zh-hk)</option>
+            </select>
+            <button id="addTtsBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition w-full">➕ 加入至列表</button>
             <p class="text-xs text-blue-500 mt-2">每個片段最長150字，超出自動截斷</p>
         </div>
 
         <!-- 匯入外部音檔卡片 (多選、無速度調整) -->
-        <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200">
+        <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200 flex flex-col">
             <h2 class="font-semibold text-green-800 mb-2">📁 匯入外部音檔</h2>
-            <input type="file" id="audioFileInput" accept="audio/*" multiple class="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-100 file:text-green-700 hover:file:bg-green-200" />
-            <p class="text-xs text-green-600 mt-2">按住 Ctrl 可選取多個檔案</p>
+            <input type="file" id="audioFileInput" accept="audio/*" multiple class="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-100 file:text-green-700 hover:file:bg-green-200 mb-2" />
+            <p class="text-xs text-green-600">按住 Ctrl 可選取多個檔案</p>
         </div>
 
         <!-- 插入空白卡片 -->
-        <div class="bg-gradient-to-br from-purple-50 to-fuchsia-50 p-4 rounded-xl border border-purple-200">
+        <div class="bg-gradient-to-br from-purple-50 to-fuchsia-50 p-4 rounded-xl border border-purple-200 flex flex-col">
             <h2 class="font-semibold text-purple-800 mb-2">⏸️ 增加空白時段</h2>
-            <div class="flex gap-2 items-center">
-                <select id="blankDuration" class="border border-purple-300 rounded-lg px-3 py-2 text-sm bg-white flex-1">
-                    <option value="60">1分鐘 (60秒)</option>
-                    <option value="120">2分鐘 (120秒)</option>
-                    <option value="180">3分鐘 (180秒)</option>
-                    <option value="300">5分鐘 (300秒)</option>
-                    <option value="600">10分鐘 (600秒)</option>
-                    <option value="30">30秒</option>
-                    <option value="10">10秒</option>
-                </select>
-                <button id="addBlankBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">➕ 插入</button>
-            </div>
+            <select id="blankDuration" class="w-full border border-purple-300 rounded-lg px-3 py-2 text-sm bg-white mb-2">
+                <option value="60">1分鐘 (60秒)</option>
+                <option value="120">2分鐘 (120秒)</option>
+                <option value="180">3分鐘 (180秒)</option>
+                <option value="300">5分鐘 (300秒)</option>
+                <option value="600">10分鐘 (600秒)</option>
+                <option value="30">30秒</option>
+                <option value="10">10秒</option>
+            </select>
+            <button id="addBlankBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium w-full">➕ 插入</button>
             <p class="text-xs text-purple-500 mt-2">可混合長空白，適合聽力答題間隔</p>
         </div>
 
-        <!-- 加入提示音卡片 (新增) -->
-        <div class="bg-gradient-to-br from-yellow-50 to-amber-50 p-4 rounded-xl border border-amber-200">
+        <!-- 加入提示音卡片 -->
+        <div class="bg-gradient-to-br from-yellow-50 to-amber-50 p-4 rounded-xl border border-amber-200 flex flex-col">
             <h2 class="font-semibold text-amber-800 mb-2">🔔 加入提示音</h2>
-            <div class="flex gap-2 items-center">
-                <select id="beepDuration" class="border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white flex-1">
-                    <option value="0.1">0.1秒</option>
-                    <option value="0.2" selected>0.2秒</option>
-                    <option value="0.5">0.5秒</option>
-                    <option value="1.0">1.0秒</option>
-                </select>
-                <button id="addBeepBtn" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">➕ 加入</button>
-            </div>
+            <select id="beepDuration" class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white mb-2">
+                <option value="0.1">0.1秒</option>
+                <option value="0.2" selected>0.2秒</option>
+                <option value="0.5">0.5秒</option>
+                <option value="1.0">1.0秒</option>
+            </select>
+            <button id="addBeepBtn" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium w-full">➕ 加入</button>
             <p class="text-xs text-amber-500 mt-2">1000Hz 提示音，適合標記題目</p>
         </div>
     </div>
@@ -107,7 +111,7 @@
     <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
         <div class="flex flex-wrap justify-between items-center mb-3">
             <h2 class="font-semibold text-gray-800 text-lg flex items-center gap-2">📋 音軌片段列表 <span class="badge" id="fragmentCount">0</span></h2>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
                 <button id="previewBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow flex items-center gap-1">▶️ 試聽順序</button>
                 <button id="stopPreviewBtn" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow flex items-center gap-1">⏹️ 停止</button>
                 <button id="clearAllBtn" class="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded-lg transition">🗑️ 清空全部</button>
@@ -156,6 +160,7 @@
     const addTtsBtn = document.getElementById('addTtsBtn');
     const audioFileInput = document.getElementById('audioFileInput');
     const addBlankBtn = document.getElementById('addBlankBtn');
+    const blankDuration = document.getElementById('blankDuration');
     const addBeepBtn = document.getElementById('addBeepBtn');
     const beepDuration = document.getElementById('beepDuration');
     const fragmentsListDiv = document.getElementById('fragmentsList');
@@ -497,14 +502,13 @@
                 // 重新建構 fragments 陣列
                 const oldFragments = [...fragments];
                 fragments = newOrder.map(id => oldFragments.find(f => f.id === id));
-                // 不重新渲染，因為DOM已經被Sortable移動，但需要更新總時長與按鈕狀態（上下按鈕disabled可能需要重新整理）
-                // 簡單重新渲染以確保按鈕狀態正確（且不影響拖曳體驗）
+                // 簡單重新渲染以確保按鈕狀態正確
                 renderFragments();
             }
         });
     }
 
-    // ---------- 產生提示音 AudioBuffer (1000Hz, 指定秒數) ----------
+    // ---------- 產生提示音 AudioBuffer ----------
     function createBeepBuffer(durationSec, sampleRate = 44100) {
         const buffer = audioContext.createBuffer(1, Math.floor(durationSec * sampleRate), sampleRate);
         const data = buffer.getChannelData(0);
@@ -648,7 +652,7 @@
         seekTo(targetTime);
     });
 
-    // 匯出MP3 (略同前，保留)
+    // 匯出MP3
     exportMp3Btn.addEventListener('click', async () => {
         if (fragments.length === 0) { showStatus('沒有可匯出的片段', true); return; }
         const missingBuffer = fragments.find(f => !f.buffer);
