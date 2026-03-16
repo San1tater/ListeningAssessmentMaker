@@ -204,7 +204,7 @@
         }
     }
 
-    // 建立時間軸並更新總時長
+    // 建立時間軸並更新總時長 (使用實際播放時長 = duration/speed)
     function buildTimeline() {
         timeline = [];
         let current = 0;
@@ -249,7 +249,7 @@
         return `${mins}:${secs < 10 ? '0' + secs : secs}`;
     }
 
-    // 更新進度條
+    // 更新進度條 (由requestAnimationFrame驅動)
     function updateSeek() {
         if (!isPreviewing || !timeline.length) return;
         const now = audioContext.currentTime;
@@ -258,6 +258,7 @@
         seekSlider.value = totalDuration > 0 ? (clamped / totalDuration) * 100 : 0;
         currentTimeLabel.innerText = formatTime(clamped);
         
+        // 如果已經超過總時長，停止預覽
         if (clamped >= totalDuration) {
             stopPreview();
         } else {
@@ -265,7 +266,7 @@
         }
     }
 
-    // 跳轉到指定時間軸位置
+    // 跳轉到指定時間軸位置 (核心：根據新時間重新排程所有片段)
     async function seekTo(timelineTime) {
         if (!isPreviewing) return;
         if (timelineTime < 0) timelineTime = 0;
@@ -274,17 +275,23 @@
             return;
         }
 
-        // 停止目前播放
+        // 停止目前所有播放
         previewSources.forEach(item => { try { item.source.stop(); } catch(e) {} });
         previewSources = [];
 
-        // 找出目標片段及偏移
+        // 重新建立時間軸 (確保是最新的速度與音量)
+        buildTimeline();
+
+        // 找出目標片段及在該片段內的偏移 (原始buffer時間)
         let targetFragment = null;
-        let offsetInFragment = 0;
+        let offsetInFragment = 0; // 原始buffer的偏移秒數
         for (let seg of timeline) {
             if (timelineTime >= seg.start && timelineTime < seg.end) {
                 targetFragment = seg.fragment;
-                offsetInFragment = timelineTime - seg.start;
+                // 計算在該片段內的相對時間 (實際播放時間)
+                const relativePlayTime = timelineTime - seg.start;
+                // 轉換為原始buffer的偏移: 原始偏移 = 相對播放時間 * speed
+                offsetInFragment = relativePlayTime * targetFragment.speed;
                 break;
             }
         }
@@ -294,28 +301,33 @@
         }
 
         timelineOffset = timelineTime;
-        previewBaseTime = audioContext.currentTime + 0.05;
+        previewBaseTime = audioContext.currentTime + 0.05; // 小延遲準備
 
-        // 從目標片段開始排程 (加入音量控制)
+        // 從目標片段開始排程，後續片段依次銜接
         let currentTime = previewBaseTime;
         let found = false;
         for (let seg of timeline) {
             if (!found && seg.fragment.id !== targetFragment.id) continue;
             if (!found) {
+                // 目標片段：從 offsetInFragment 開始播放
                 const source = audioContext.createBufferSource();
                 source.buffer = seg.fragment.buffer;
-                source.playbackRate.value = seg.fragment.speed;
+                source.playbackRate.value = seg.fragment.speed; // 關鍵：設定播放速率
                 
                 const gainNode = audioContext.createGain();
                 gainNode.gain.value = seg.fragment.volume !== undefined ? seg.fragment.volume : 1.0;
                 source.connect(gainNode);
                 gainNode.connect(audioContext.destination);
                 
+                // 計算剩餘實際播放時間
+                const remainingActual = seg.duration - (timelineTime - seg.start);
                 source.start(currentTime, offsetInFragment);
                 previewSources.push({ source, gainNode });
-                currentTime += (seg.duration - offsetInFragment);
+                
+                currentTime += remainingActual;
                 found = true;
             } else {
+                // 後續片段：從頭開始
                 const source = audioContext.createBufferSource();
                 source.buffer = seg.fragment.buffer;
                 source.playbackRate.value = seg.fragment.speed;
@@ -331,11 +343,12 @@
             }
         }
 
+        // 重啟動畫幀更新進度條
         if (animationFrame) cancelAnimationFrame(animationFrame);
         animationFrame = requestAnimationFrame(updateSeek);
     }
 
-    // 開始預覽
+    // 開始預覽 (從指定時間)
     async function startPreview(fromTime = 0) {
         stopPreview();
 
@@ -356,6 +369,7 @@
                 return;
             }
 
+            // 重新建立時間軸 (確保最新速度)
             buildTimeline();
             if (totalDuration === 0) {
                 showStatus('總時長為零', true);
@@ -372,13 +386,14 @@
             if (fromTime > 0 && fromTime < totalDuration) {
                 await seekTo(fromTime);
             } else {
+                // 從頭開始播放
                 timelineOffset = 0;
                 previewBaseTime = audioContext.currentTime + 0.05;
                 let currentTime = previewBaseTime;
                 for (let seg of timeline) {
                     const source = audioContext.createBufferSource();
                     source.buffer = seg.fragment.buffer;
-                    source.playbackRate.value = seg.fragment.speed;
+                    source.playbackRate.value = seg.fragment.speed; // 設定速率
                     
                     const gainNode = audioContext.createGain();
                     gainNode.gain.value = seg.fragment.volume !== undefined ? seg.fragment.volume : 1.0;
@@ -397,7 +412,7 @@
         }
     }
 
-    // ---------- 渲染列表 + 音量控制 + 速度控制 ----------
+    // ---------- 渲染列表 + 音量/速度控制 ----------
     function renderFragments() {
         stopPreview();
 
@@ -456,7 +471,7 @@
                     if (isNaN(val) || val < 0.3) val = 0.3;
                     if (val > 3) val = 3;
                     frag.speed = val;
-                    renderFragments();
+                    renderFragments(); // 重新渲染更新實際時長顯示
                 }
             });
         });
@@ -510,6 +525,7 @@
 
         updateTotalTimeDisplay();
 
+        // 初始化Sortable拖曳排序
         if (sortableInstance) sortableInstance.destroy();
         sortableInstance = new Sortable(container, {
             animation: 150,
@@ -519,12 +535,12 @@
                 const newOrder = Array.from(items).map(item => parseInt(item.dataset.id));
                 const oldFragments = [...fragments];
                 fragments = newOrder.map(id => oldFragments.find(f => f.id === id));
-                renderFragments();
+                renderFragments(); // 重新渲染以確保按鈕狀態正確
             }
         });
     }
 
-    // 產生提示音
+    // 產生提示音 (1000Hz)
     function createBeepBuffer(durationSec, sampleRate = 44100) {
         const buffer = audioContext.createBuffer(1, Math.floor(durationSec * sampleRate), sampleRate);
         const data = buffer.getChannelData(0);
@@ -552,7 +568,7 @@
         renderFragments();
     }
 
-    // TTS
+    // TTS合成
     async function fetchTtsBuffer(text, lang, key) {
         if (!key || key.trim() === '') throw new Error('請輸入API Key');
         const trimmed = text.slice(0, 150);
@@ -605,7 +621,7 @@
         }
     });
 
-    // 匯入外部音檔
+    // 匯入外部音檔 (多檔案自動)
     audioFileInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -651,18 +667,18 @@
         }
     });
 
-    // 預覽
+    // 預覽按鈕
     previewBtn.addEventListener('click', () => {
         startPreview(0);
     });
 
-    // 停止
+    // 停止預覽
     stopPreviewBtn.addEventListener('click', () => {
         stopPreview();
         showStatus('預覽已停止');
     });
 
-    // 進度條跳轉
+    // 進度條拖曳跳轉
     seekSlider.addEventListener('input', (e) => {
         if (!isPreviewing || !timeline.length) return;
         const ratio = parseFloat(e.target.value) / 100;
